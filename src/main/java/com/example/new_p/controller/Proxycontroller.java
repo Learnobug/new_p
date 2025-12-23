@@ -9,8 +9,10 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.IOException;
 import java.net.URI;
@@ -23,6 +25,8 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+
+import static org.springframework.web.util.UriComponentsBuilder.*;
 
 @RestController
 public class Proxycontroller {
@@ -42,54 +46,46 @@ public class Proxycontroller {
     @Value("${origin.url}")
     private String origin;
 
-//    public Proxycontroller(String origin){
-//        this.Origin = origin;
-//    }
+
     @RequestMapping("/**")
-    public void intercept(HttpServletRequest req) throws IOException, URISyntaxException {
+    public ResponseEntity<byte[]> intercept(HttpServletRequest req) throws IOException, URISyntaxException {
         String key = this.cacheKeyService.generate_hash(req);
-        // generate key
 
         CacheEntry entry = cacheManager.get(key);
 
 
         if (entry == null ){
-             fromOriginAndCache(req);
-             return;
-
+             return fromOriginAndCache(req);
         }
 
-        fromCache(entry);
+        return fromCache(entry);
     }
 
 
-    public CacheEntry fromCache(CacheEntry entry){
-        Map<String,String> header = entry.getResponseHeader();
-        header.put("X-CACHE","HIT");
-        entry.setResponseHeader(header);
-        return entry;
+    public ResponseEntity<byte[]> fromCache(CacheEntry entry) throws IOException {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setAll(entry.getResponseHeader());
+        headers.add("X-Cache", "HIT");
+        return new ResponseEntity<>(
+                entry.getResponsebody(),
+                headers,
+                Integer.parseInt(entry.getStatuscode())
+        );
     }
 
 
-    public void fromOriginAndCache(HttpServletRequest req) throws IOException, URISyntaxException {
+    public ResponseEntity<byte[]> fromOriginAndCache(HttpServletRequest req) throws IOException, URISyntaxException {
         requestEntity =  new RequestEntity(req);
-        URI originuri = new URI(this.origin);
-        System.out.println(requestEntity.getMethod());
-        System.out.println(requestEntity.getMethod());
-        System.out.println(requestEntity.getHeaders());
-        System.out.println(requestEntity.getBody());
-        this.forwardservice.forward(requestEntity.getMethod(),originuri,requestEntity.getHeaders(), requestEntity.getBody());
+        URI targetUri = UriComponentsBuilder
+                .fromUriString(origin)     // ✅ ensures scheme + host
+                .path(req.getRequestURI())
+                .query(req.getQueryString())
+                .build(true)
+                .toUri();
+
+
+        return this.forwardservice.forward(requestEntity.getMethod(),targetUri,requestEntity.getHeaders(), requestEntity.getBody());
 
     }
-    // localhost:8080/api/lll
-    // example.com
-    // example.com/api/ll
-
-    //check the req in cache
-    // if cache- hit - present in cache - don't forward the req to server
-    // if cache - miss- forward the request to server - and cache the response
-    // 1) forwarding service
-    // 2) caching storage implementation - LRU cache
-    // 3) KEY CONSTRUCTION ->
 
 }
