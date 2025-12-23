@@ -1,6 +1,7 @@
 package com.example.new_p.service;
 
 import com.example.new_p.entity.CacheEntry;
+import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -13,20 +14,21 @@ import java.nio.file.Paths;
 @Service
 public class DiskCacheManager {
 
-    private static final String CACHE_DIR = "cache-store";
+    private static final Path CACHE_DIR = Paths.get("/tmp/cache-store");
 
-    public DiskCacheManager()  {
+    @PostConstruct
+    public void init() {
         try {
-            Files.createDirectories(Paths.get(CACHE_DIR));
+            Files.createDirectories(CACHE_DIR);
         } catch (IOException e) {
             throw new IllegalStateException(
-                    "Failed to create cache directory: " + CACHE_DIR, e
+                    "Failed to create disk cache directory: " + CACHE_DIR, e
             );
         }
     }
 
     private Path file(String key) {
-        return Paths.get(CACHE_DIR, key + ".bin");
+        return CACHE_DIR.resolve(key + ".bin");
     }
 
     public void put(String key, CacheEntry entry) {
