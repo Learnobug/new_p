@@ -1,37 +1,32 @@
 package com.example.new_p.service;
 
-import com.example.new_p.config.Webclientconfig;
 import com.example.new_p.entity.CacheEntry;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.net.URI;
 import java.time.Duration;
 
-import static com.example.new_p.entity.CacheEntry.fromResponse;
-
-
 @Service
-public class Forwardservice{
-
+public class Forwardservice {
 
     private final WebClient webclient;
 
     @Autowired
     private CacheManager cacheManager;
 
+    @Autowired
+    private DiskCacheManager diskCacheManager;
 
     @Autowired
     private CacheKeyService cacheKeyService;
 
     public Forwardservice(WebClient webclient) {
         this.webclient = webclient;
-
     }
 
     public ResponseEntity<byte[]> forward(
@@ -41,7 +36,6 @@ public class Forwardservice{
             byte[] body,
             String key
     ) {
-
         WebClient.RequestBodySpec req = webclient
                 .method(method)
                 .uri(targetUri)
@@ -58,25 +52,22 @@ public class Forwardservice{
                         ? req.bodyValue(body).retrieve()
                         : req.retrieve();
 
-        // 🔥 CALL ORIGIN ONLY ONCE
         ResponseEntity<byte[]> originResponse =
                 responseSpec.toEntity(byte[].class).block();
 
-        // cache it
         CacheEntry cacheEntry = CacheEntry.fromResponse(
-                originResponse,
+                originResponse.getBody(),
+                originResponse.getStatusCode().value(),
                 targetUri.toString(),
+                originResponse.getHeaders(),
                 Duration.ofMinutes(5).toMillis()
         );
         cacheManager.put(key, cacheEntry);
-
-        System.out.println("cacheEntry" + cacheEntry);
-        // 🔥 add X-Cache: MISS
+        this.diskCacheManager.put(key, cacheEntry);
         HttpHeaders headers = new HttpHeaders();
         headers.putAll(originResponse.getHeaders());
         headers.add("X-Cache", "MISS");
 
-        System.out.println("headers" + headers);
         return new ResponseEntity<>(
                 originResponse.getBody(),
                 headers,

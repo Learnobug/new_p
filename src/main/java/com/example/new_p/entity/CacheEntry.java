@@ -3,50 +3,48 @@ package com.example.new_p.entity;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatusCode;
-import org.springframework.http.ResponseEntity;
 
+import java.io.Serializable;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
-@Getter@Setter
-public class CacheEntry {
-   // key-> []
+@Getter
+@Setter
+public class CacheEntry implements Serializable {
+
+    private static final long serialVersionUID = 1L;
+
     private final byte[] responsebody;
-    private final HttpStatusCode statuscode;
+    private final int statuscode;               // int instead of HttpStatus
     private final String serverURI;
-    private HttpHeaders responseHeader;
+    private Map<String, List<String>> responseHeader; // serializable
     private Long expiretime;
 
-    private   CacheEntry(byte[] responsebody, HttpStatusCode statuscode, String serverURI,Long time, HttpHeaders headers){
-        this.responseHeader = new HttpHeaders();
-        this.responseHeader.putAll(headers);
+    public CacheEntry(byte[] responsebody, int statuscode, String serverURI,
+                      long expiretime, Map<String, List<String>> headers) {
         this.responsebody = responsebody;
         this.statuscode = statuscode;
         this.serverURI = serverURI;
-        this.expiretime = time;
+        this.expiretime = expiretime;
+        this.responseHeader = new HashMap<>(headers);
     }
-
 
     public static CacheEntry fromResponse(
-            ResponseEntity<byte[]> response,
+            byte[] body,
+            int statusCode,
             String serverURI,
-            long ttlMillis
-    ) {
-        long expiresAt = Instant.now().toEpochMilli() + ttlMillis;
+            HttpHeaders headers,
+            long ttlMillis) {
 
-        return new CacheEntry(
-                response.getBody(),
-                response.getStatusCode(),
-                serverURI,
-                expiresAt,
-                response.getHeaders()
-        );
+        Map<String, List<String>> headerMap = new HashMap<>();
+        headers.forEach((key, values) -> headerMap.put(key, List.copyOf(values)));
+        long expiresAt = Instant.now().toEpochMilli() + ttlMillis;
+        return new CacheEntry(body, statusCode, serverURI, expiresAt, headerMap);
     }
 
-
-    public boolean isExpired(){
+    public boolean isExpired() {
         return Instant.now().toEpochMilli() > this.expiretime;
     }
 }
