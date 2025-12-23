@@ -50,12 +50,11 @@ public class Proxycontroller {
     @RequestMapping("/**")
     public ResponseEntity<byte[]> intercept(HttpServletRequest req) throws IOException, URISyntaxException {
         String key = this.cacheKeyService.generate_hash(req);
-
         CacheEntry entry = cacheManager.get(key);
-
+        System.out.println("Key" + key);
 
         if (entry == null ){
-             return fromOriginAndCache(req);
+             return fromOriginAndCache(req,key);
         }
 
         return fromCache(entry);
@@ -63,18 +62,18 @@ public class Proxycontroller {
 
 
     public ResponseEntity<byte[]> fromCache(CacheEntry entry) throws IOException {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setAll(entry.getResponseHeader());
-        headers.add("X-Cache", "HIT");
-        return new ResponseEntity<>(
+        HttpHeaders header = entry.getResponseHeader();
+        header.add("X-CACHE","HIT");
+        System.out.println("Cache HIT");
+        return new ResponseEntity<byte[]>(
                 entry.getResponsebody(),
-                headers,
-                Integer.parseInt(entry.getStatuscode())
+                header,
+                entry.getStatuscode()
         );
     }
 
 
-    public ResponseEntity<byte[]> fromOriginAndCache(HttpServletRequest req) throws IOException, URISyntaxException {
+    public ResponseEntity<byte[]> fromOriginAndCache(HttpServletRequest req,String key) throws IOException, URISyntaxException {
         requestEntity =  new RequestEntity(req);
         URI targetUri = UriComponentsBuilder
                 .fromUriString(origin)     // ✅ ensures scheme + host
@@ -84,7 +83,8 @@ public class Proxycontroller {
                 .toUri();
 
 
-        return this.forwardservice.forward(requestEntity.getMethod(),targetUri,requestEntity.getHeaders(), requestEntity.getBody());
+        System.out.println("Cache MISS "+ key);
+        return this.forwardservice.forward(requestEntity.getMethod(),targetUri,requestEntity.getHeaders(), requestEntity.getBody(),key);
 
     }
 
